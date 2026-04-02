@@ -61,6 +61,31 @@ _OPT_IN_THINKING_MODELS: Dict[str, dict] = {
     "deepseek-chat": {"thinking": {"type": "enabled"}},
 }
 
+# Custom model pricing for models not in LiteLLM's built-in price list
+# This prevents cost calculation errors for MiniMax-M2.7 and similar models
+_CUSTOM_MODEL_PRICING: Dict[str, dict] = {
+    "MiniMax-M2.7": {
+        "supports_function_calling": True,
+        "supports_vision": False,
+        "supports_audio_input": False,
+        "supports_audio_output": False,
+        "context_window": 100000,
+        "max_tokens": 10000,
+        "input_cost_per_token": 0.0,
+        "output_cost_per_token": 0.0,
+    },
+    "MiniMax-M2.5": {
+        "supports_function_calling": True,
+        "supports_vision": False,
+        "supports_audio_input": False,
+        "supports_audio_output": False,
+        "context_window": 100000,
+        "max_tokens": 10000,
+        "input_cost_per_token": 0.0,
+        "output_cost_per_token": 0.0,
+    },
+}
+
 
 def _model_matches(model: str, entries: List[str]) -> bool:
     """Check if model name matches any entry (exact or prefix with version suffix)."""
@@ -117,7 +142,25 @@ class LLMToolAdapter:
         self._config = config
         self._router = None          # litellm Router (multi-key primary model)
         self._litellm_available = False
+        self._register_custom_model_pricing()
         self._init_litellm()
+
+    @staticmethod
+    def _register_custom_model_pricing() -> None:
+        """Register custom model pricing for models not in LiteLLM's built-in price list.
+
+        This prevents cost calculation errors for MiniMax-M2.7 and similar models.
+        """
+        for model_name, pricing in _CUSTOM_MODEL_PRICING.items():
+            try:
+                litellm.register_model(
+                    {
+                        model_name: pricing
+                    }
+                )
+                logger.debug(f"Registered custom pricing for {model_name}")
+            except Exception as e:
+                logger.debug(f"Model {model_name} may already be registered or pricing error: {e}")
 
     def _has_channel_config(self) -> bool:
         """Check if multi-channel config (channels / YAML) is active."""
@@ -388,7 +431,19 @@ class LLMToolAdapter:
         """Parse litellm OpenAI-compatible response into LLMResponse."""
         choice = response.choices[0]
         tool_calls: List[ToolCall] = []
+
+        # Handle MiniMax-specific content_blocks format
+        # MiniMax-M2.7 may return content_blocks at choice level instead of message.content
         text_content = choice.message.content
+        if text_content is None and hasattr(choice, 'content_blocks') and choice.content_blocks:
+            for block in choice.content_blocks:
+                if hasattr(block, 'text') and block.text:
+                    text_content = block.text
+                    break
+                elif hasattr(block, 'content') and block.content:
+                    text_content = block.content
+                    break
+
         # DeepSeek/Qwen thinking mode; not in standard OpenAI type, accessed via getattr
         reasoning_content = getattr(choice.message, "reasoning_content", None)
 
