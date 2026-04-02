@@ -281,7 +281,7 @@ class SystemConfigService:
             "model": resolved_model,
             "messages": [{"role": "user", "content": "Reply with OK"}],
             "temperature": 0,
-            "max_tokens": 8,
+            "max_tokens": 256,  # Increased to allow MiniMax-M2.7 thinking process + response
             "timeout": max(5.0, float(timeout_seconds)),
         }
         if selected_api_key:
@@ -292,12 +292,53 @@ class SystemConfigService:
         try:
             import litellm
 
+            # Register custom model pricing for MiniMax models not in LiteLLM's built-in list
+            # This must be done before litellm.completion() to prevent cost calculation errors
+            for model_name in ["MiniMax-M2.7", "MiniMax-M2.5"]:
+                try:
+                    litellm.register_model({
+                        model_name: {
+                            "litellm_provider": "openai",
+                            "mode": "chat",
+                            "supports_function_calling": True,
+                            "supports_vision": False,
+                            "supports_audio_input": False,
+                            "supports_audio_output": False,
+                            "context_window": 100000,
+                            "max_tokens": 10000,
+                            "input_cost_per_token": 0.0,
+                            "output_cost_per_token": 0.0,
+                        }
+                    })
+                except Exception:
+                    pass
+
             started_at = time.perf_counter()
             response = litellm.completion(**call_kwargs)
             latency_ms = int((time.perf_counter() - started_at) * 1000)
             content = ""
             if response and getattr(response, "choices", None):
-                content = str(response.choices[0].message.content or "").strip()
+                choice = response.choices[0]
+                # MiniMax-M2.7 uses content_blocks format directly on choice (not inside message)
+                # Check both possible locations for content_blocks
+                content_blocks = None
+                if hasattr(choice, "content_blocks"):
+                    content_blocks = choice.content_blocks
+                elif hasattr(choice.message, "content_blocks"):
+                    content_blocks = choice.message.content_blocks
+
+                if content_blocks:
+                    # New MiniMax response format: content_blocks[].text
+                    for block in content_blocks:
+                        if getattr(block, "type", None) == "text":
+                            text = getattr(block, "text", "") or ""
+                            content += text
+                    content = content.strip()
+                else:
+                    # Standard OpenAI format
+                    message = getattr(choice, "message", None)
+                    if message:
+                        content = str(message.content or "").strip()
 
             if not content:
                 return {
