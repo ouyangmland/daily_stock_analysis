@@ -313,12 +313,17 @@ class SystemConfigService:
                     content_blocks = choice.message.content_blocks
 
                 if content_blocks:
-                    # New MiniMax response format: content_blocks[].text
+                    # MiniMax response format: concatenate ALL text blocks
+                    # Handle both type=="text" with .text and .content fields
+                    text_parts = []
                     for block in content_blocks:
                         if getattr(block, "type", None) == "text":
                             text = getattr(block, "text", "") or ""
-                            content += text
-                    content = content.strip()
+                            if text:
+                                text_parts.append(text)
+                        elif hasattr(block, "content") and block.content:
+                            text_parts.append(block.content)
+                    content = "".join(text_parts).strip()
                 else:
                     # Standard OpenAI format
                     message = getattr(choice, "message", None)
