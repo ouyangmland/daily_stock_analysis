@@ -291,27 +291,12 @@ class SystemConfigService:
 
         try:
             import litellm
+            from src.agent.llm_adapter import LLMToolAdapter
 
             # Register custom model pricing for MiniMax models not in LiteLLM's built-in list
             # This must be done before litellm.completion() to prevent cost calculation errors
-            for model_name in ["MiniMax-M2.7", "MiniMax-M2.5"]:
-                try:
-                    litellm.register_model({
-                        model_name: {
-                            "litellm_provider": "openai",
-                            "mode": "chat",
-                            "supports_function_calling": True,
-                            "supports_vision": False,
-                            "supports_audio_input": False,
-                            "supports_audio_output": False,
-                            "context_window": 100000,
-                            "max_tokens": 10000,
-                            "input_cost_per_token": 0.0,
-                            "output_cost_per_token": 0.0,
-                        }
-                    })
-                except Exception:
-                    pass
+            # Reuses the registration logic from LLMToolAdapter to avoid code duplication
+            LLMToolAdapter._register_custom_model_pricing()
 
             started_at = time.perf_counter()
             response = litellm.completion(**call_kwargs)
