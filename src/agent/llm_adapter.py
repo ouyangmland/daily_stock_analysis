@@ -62,7 +62,8 @@ _OPT_IN_THINKING_MODELS: Dict[str, dict] = {
 }
 
 # Custom model pricing for models not in LiteLLM's built-in price list
-# This prevents cost calculation errors for MiniMax-M2.7 and similar models
+# Official MiniMax pricing: https://platform.minimax.io/docs/guides/pricing-paygo
+# - MiniMax-M2.7 / M2.5: $0.3/M input tokens, $1.2/M output tokens
 _CUSTOM_MODEL_PRICING: Dict[str, dict] = {
     "MiniMax-M2.7": {
         "supports_function_calling": True,
@@ -71,8 +72,8 @@ _CUSTOM_MODEL_PRICING: Dict[str, dict] = {
         "supports_audio_output": False,
         "context_window": 100000,
         "max_tokens": 10000,
-        "input_cost_per_token": 0.0,
-        "output_cost_per_token": 0.0,
+        "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens
+        "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens
     },
     "MiniMax-M2.5": {
         "supports_function_calling": True,
@@ -81,8 +82,8 @@ _CUSTOM_MODEL_PRICING: Dict[str, dict] = {
         "supports_audio_output": False,
         "context_window": 100000,
         "max_tokens": 10000,
-        "input_cost_per_token": 0.0,
-        "output_cost_per_token": 0.0,
+        "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens
+        "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens
     },
 }
 
@@ -435,6 +436,7 @@ class LLMToolAdapter:
         # Handle MiniMax-specific content_blocks format
         # MiniMax-M2.7 may return content_blocks at choice level or inside message
         # Check both possible locations for content_blocks to ensure consistency
+        # Concatenate ALL text blocks to avoid truncating multi-block responses
         text_content = choice.message.content
         if text_content is None:
             content_blocks = None
@@ -444,15 +446,17 @@ class LLMToolAdapter:
                 content_blocks = choice.message.content_blocks
 
             if content_blocks:
-                # New MiniMax response format: content_blocks[].text
+                # MiniMax response format: content_blocks[].text
+                # Concatenate ALL text blocks to preserve complete response
+                text_parts = []
                 for block in content_blocks:
                     if getattr(block, "type", None) == "text":
                         text = getattr(block, "text", "") or ""
-                        text_content = text
-                        break
+                        if text:
+                            text_parts.append(text)
                     elif hasattr(block, "content") and block.content:
-                        text_content = block.content
-                        break
+                        text_parts.append(block.content)
+                text_content = "".join(text_parts).strip()
 
         # DeepSeek/Qwen thinking mode; not in standard OpenAI type, accessed via getattr
         reasoning_content = getattr(choice.message, "reasoning_content", None)
