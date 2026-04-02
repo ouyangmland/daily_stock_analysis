@@ -433,16 +433,26 @@ class LLMToolAdapter:
         tool_calls: List[ToolCall] = []
 
         # Handle MiniMax-specific content_blocks format
-        # MiniMax-M2.7 may return content_blocks at choice level instead of message.content
+        # MiniMax-M2.7 may return content_blocks at choice level or inside message
+        # Check both possible locations for content_blocks to ensure consistency
         text_content = choice.message.content
-        if text_content is None and hasattr(choice, 'content_blocks') and choice.content_blocks:
-            for block in choice.content_blocks:
-                if hasattr(block, 'text') and block.text:
-                    text_content = block.text
-                    break
-                elif hasattr(block, 'content') and block.content:
-                    text_content = block.content
-                    break
+        if text_content is None:
+            content_blocks = None
+            if hasattr(choice, "content_blocks"):
+                content_blocks = choice.content_blocks
+            elif hasattr(choice.message, "content_blocks"):
+                content_blocks = choice.message.content_blocks
+
+            if content_blocks:
+                # New MiniMax response format: content_blocks[].text
+                for block in content_blocks:
+                    if getattr(block, "type", None) == "text":
+                        text = getattr(block, "text", "") or ""
+                        text_content = text
+                        break
+                    elif hasattr(block, "content") and block.content:
+                        text_content = block.content
+                        break
 
         # DeepSeek/Qwen thinking mode; not in standard OpenAI type, accessed via getattr
         reasoning_content = getattr(choice.message, "reasoning_content", None)
