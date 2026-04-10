@@ -417,13 +417,14 @@ docker-compose -f ./docker/docker-compose.yml ps
 
 # 查看日志
 docker-compose -f ./docker/docker-compose.yml logs -f server
-
+docker-compose -f ./docker/docker-compose.yml logs -f analyzer
 # 停止服务
 docker-compose -f ./docker/docker-compose.yml down
 
 # 重建镜像（代码更新后）
 docker-compose -f ./docker/docker-compose.yml build --no-cache
 docker-compose -f ./docker/docker-compose.yml up -d server
+docker-compose -f ./docker/docker-compose.yml up -d
 ```
 
 ### 手动构建镜像
