@@ -420,7 +420,8 @@ docker-compose -f ./docker/docker-compose.yml logs -f server
 docker-compose -f ./docker/docker-compose.yml logs -f analyzer
 # 停止服务
 docker-compose -f ./docker/docker-compose.yml down
-
+# 更新代码
+git fetch --all && git reset --hard origin/main && git pull origin main
 # 重建镜像（代码更新后）
 docker-compose -f ./docker/docker-compose.yml build --no-cache
 docker-compose -f ./docker/docker-compose.yml up -d server
